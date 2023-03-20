@@ -17,7 +17,7 @@ class User(TimestampedModel):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=100, null=True)
     last_name = models.CharField(max_length=100, null=True)
-
+    nickname = models.CharField(max_length=100, null=True)
 
 class Tag(TimestampedModel):
     """A tag for the group of posts."""
@@ -53,3 +53,18 @@ class PostLike(TimestampedModel):
 
     class Meta:
         unique_together = ['post', 'creator']
+
+
+class Vote(models.Model):
+    subject = models.CharField(max_length=200)
+    positive = models.BooleanField(default=True)
+
+    @classmethod
+    def in_favour(cls, subject):
+        """Create a new vote in favour of the subject."""
+        return cls.objects.create(subject=subject, positive=True)
+
+    @classmethod
+    def against(cls, subject):
+        """Create a new vote against of the subject."""
+        return cls.objects.create(subject=subject, positive=False)
