@@ -62,9 +62,18 @@ class Vote(models.Model):
     @classmethod
     def in_favour(cls, subject):
         """Create a new vote in favour of the subject."""
-        return cls.objects.create(subject=subject, positive=True)
+        return cls.objects.create(subject=subject)
 
     @classmethod
     def against(cls, subject):
         """Create a new vote against of the subject."""
         return cls.objects.create(subject=subject, positive=False)
+
+    @classmethod
+    def results_for(cls, subject):
+        """Return the voting results for the subject"""
+        list_votes = cls.objects.filter(subject=subject)
+        return {
+            'in favour': list_votes.filter(positive=True).count(),
+            'against': list_votes.filter(positive=False).count()
+        }
