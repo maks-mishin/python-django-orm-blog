@@ -1,3 +1,5 @@
+from typing import Set
+
 from django.db import models
 
 
@@ -18,6 +20,7 @@ class User(TimestampedModel):
     first_name = models.CharField(max_length=100, null=True)
     last_name = models.CharField(max_length=100, null=True)
     nickname = models.CharField(max_length=100, null=True)
+
 
 class Tag(TimestampedModel):
     """A tag for the group of posts."""
@@ -77,3 +80,31 @@ class Vote(models.Model):
             'in favour': list_votes.filter(positive=True).count(),
             'against': list_votes.filter(positive=False).count()
         }
+
+
+class CycleInGraphError(Exception):
+    """An exception that means that some graph has cycles."""
+    pass
+
+
+class Task(models.Model):
+    value = models.CharField(max_length=200)
+    parent = models.ForeignKey(
+        'self',
+        null=True,
+        on_delete=models.CASCADE
+    )
+
+    @property
+    def root(self):
+        """Returns a root task (task which parent is None)"""
+
+        def search_root(task, task_set: Set):
+            if task.value in task_set:
+                raise CycleInGraphError(task.id)
+            if task.parent is None:
+                return task
+            task_set.add(task.value)
+            return search_root(task.parent, task_set)
+        root_task = search_root(self, set())
+        return root_task

@@ -2,42 +2,54 @@ import pytest
 from python_django_orm_blog.blog import models
 
 
-@pytest.mark.django_db
-def test_creation():
-    vote1 = models.Vote.in_favour('test')
-    assert isinstance(vote1, models.Vote)
-    assert vote1.positive
-
-    vote2 = models.Vote.against('test')
-    assert isinstance(vote2, models.Vote)
-    assert not vote2.positive
-
-    assert models.Vote.objects.count() == 2
+def make_tasks(graph, parent=None):
+    for value, sub_graph in graph.items():
+        task = models.Task.objects.create(value=value, parent=parent)
+        make_tasks(sub_graph, parent=task)
 
 
 @pytest.mark.django_db
-def test_count():
-    plan = 'Make some stupid'
-    for _ in range(5):
-        models.Vote.in_favour(plan)
-    for _ in range(7):
-        models.Vote.against(plan)
-    assert models.Vote.objects.filter(positive=True).count() == 5
-    assert models.Vote.objects.filter(positive=False).count() == 7
+def test_without_cycles():
+    make_tasks({
+        'buy some bread': {},
+        'learn Python': {
+            'buy a book': {},
+            'complete the Python profession on Hexlet': {
+                'register on Hexlet': {},
+            },
+        },
+    })
+
+    task1 = models.Task.objects.get(value='buy some bread')
+    assert task1.root is task1
+
+    task2 = models.Task.objects.get(value='register on Hexlet')
+    assert task2.root.value == 'learn Python'
 
 
 @pytest.mark.django_db
-def test_counting():
-    subj = 'Jump over the campfire.'
-    for _ in range(3):
-        models.Vote.in_favour(subj)
-    for _ in range(5):
-        models.Vote.against(subj)
-    for _ in range(7):
-        models.Vote.against('Burn money')
-    assert models.Vote.results_for(subj) == {'in favour': 3, 'against': 5}
+def test_with_cycles():
+    make_tasks({
+        'A': {
+            'B': {
+                'C': {},
+                'D': {},
+            },
+        },
+    })
 
+    task_a = models.Task.objects.get(value='A')
+    task_b = models.Task.objects.get(value='B')
+    task_c = models.Task.objects.get(value='C')
+    # завязываем узел
+    task_a.parent = task_c
+    task_a.save()
 
-@pytest.mark.django_db
-def test_on_unknown_subject():
-    assert models.Vote.results_for('???') == {'in favour': 0, 'against': 0}
+    task_d = models.Task.objects.get(value='D')
+    with pytest.raises(models.CycleInGraphError) as exc_info:
+        task_d.root
+    # исключение должно содержать id задачи,
+    # которая уже встречалась на пути поиска корневой задачи
+    # D -> B -> A -> C -> B
+    #                     ^ встречается второй раз!
+    assert exc_info.value.args[0] == task_b.id
