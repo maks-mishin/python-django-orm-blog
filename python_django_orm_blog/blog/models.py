@@ -1,7 +1,6 @@
-from typing import Tuple
-
-from django.db import models
-from django.db.models import Count, Sum
+from django.db import models, transaction
+from django.db.models import Count
+from django.db.utils import IntegrityError
 
 
 class TimestampedModel(models.Model):
@@ -162,3 +161,24 @@ class ClipLike(models.Model):
 
 class ClipDislike(models.Model):
     clip = models.ForeignKey(Clip, on_delete=models.CASCADE)
+
+
+class Project(models.Model):
+    name = models.CharField(max_length=200)
+
+    @classmethod
+    @transaction.atomic
+    def reorganize(cls, assignments):
+        Worker.objects.exclude(id__in=assignments).update(project_id=None)
+
+        for worker_id, new_project_id in assignments.items():
+            Worker.objects.filter(id=worker_id).update(project_id=new_project_id)
+
+
+class Worker(models.Model):
+    name = models.CharField(max_length=200)
+    project = models.ForeignKey(
+        Project,
+        null=True,
+        on_delete=models.SET_NULL,
+    )
