@@ -1,6 +1,7 @@
-from typing import Set
+from typing import Tuple
 
 from django.db import models
+from django.db.models import Count, Sum
 
 
 class TimestampedModel(models.Model):
@@ -99,12 +100,65 @@ class Task(models.Model):
     def root(self):
         """Returns a root task (task which parent is None)"""
 
-        def search_root(task, task_set: Set):
+        def search_root(task, task_set):
             if task.value in task_set:
                 raise CycleInGraphError(task.id)
             if task.parent is None:
                 return task
             task_set.add(task.value)
             return search_root(task.parent, task_set)
+
         root_task = search_root(self, set())
         return root_task
+
+
+class Island(models.Model):
+    name = models.CharField(max_length=200)
+
+    def can_reach(self, island, *, by_ship):
+        """Return True if one can reach the @island using a @by ship"""
+        return by_ship in island.ships.all() and by_ship in self.ships.all()
+
+
+class Ship(models.Model):
+    name = models.CharField(max_length=200)
+    islands = models.ManyToManyField(Island, related_name='ships')
+
+
+class Clip(models.Model):
+    title = models.CharField(max_length=200)
+
+    def like(self):
+        ClipLike.objects.create(clip=self)
+
+    def dislike(self):
+        ClipDislike.objects.create(clip=self)
+
+    @classmethod
+    def rates_for(cls, **kwargs) -> (int, int):
+        """
+        Returns a tuple of integers (likes, dislikes)
+        for the clip(s) filtered by provided kwargs.
+        """
+        clip_likes = Clip.objects.filter(
+            **kwargs
+        ).annotate(
+            count=Count('cliplike', dictinct=True)
+        )[0]
+        clip_dislikes = Clip.objects.filter(
+            **kwargs
+        ).annotate(
+            count=Count('clipdislike', dictinct=True)
+        )[0]
+        return (
+            clip_likes.count,
+            clip_dislikes.count
+        )
+
+
+class ClipLike(models.Model):
+    clip = models.ForeignKey(Clip, on_delete=models.CASCADE)
+
+
+class ClipDislike(models.Model):
+    clip = models.ForeignKey(Clip, on_delete=models.CASCADE)
